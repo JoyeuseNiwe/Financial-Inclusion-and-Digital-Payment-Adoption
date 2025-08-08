@@ -551,6 +551,8 @@ def update_year_options(selected_country):
         options = [{'label': y, 'value': y} for y in all_years]
         return options, max(all_years)
 
-# --- Run Server ---
 if __name__ == "__main__":
-    app.run(debug=True, port=8078)
+    import os
+    port = int(os.environ.get("PORT", 8078))
+    app.run(debug=False, host="0.0.0.0", port=port)
+
