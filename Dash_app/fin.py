@@ -1,4 +1,5 @@
 import warnings
+import gdown
 import os
 import dash
 from dash import html, dcc, Input, Output
@@ -21,18 +22,14 @@ app = dash.Dash(
 )
 server = app.server
 
-# Get full path to current file
-current_file = os.path.abspath(__file__)
+file_id = '1CQOEn-YIGRwO_KUWBRD1myhExS7S2wI1'
+url = f'https://drive.google.com/uc?id={file_id}'
 
-# Step up from Dash_app → to Financial inclusion
-dash_app_folder = os.path.dirname(current_file)
-project_root = os.path.dirname(dash_app_folder)
+# Download and save locally (temporary)
+gdown.download(url, 'temp.csv', quiet=False)
 
-# Correct path to your CSV
-csv_path = os.path.join(project_root, "Data", "processed", "world data.csv")
-
-# Read the CSV
-df = pd.read_csv(csv_path)
+# Load the CSV
+df = pd.read_csv('temp.csv')
 
 df["Indicator value"] = df["Indicator value"].astype(str).str.replace('%', '', regex=False).astype(float)
 
