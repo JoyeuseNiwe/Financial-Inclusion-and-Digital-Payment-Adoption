@@ -59,33 +59,83 @@ def assign_type(indicator):
         return "Digital Financial Service Usage"
     return "Other"
 
-# Apply the classification
+# Apply classification
 df["Type"] = df["Indicator"].apply(assign_type)
 
-# Filter the data
-account_df = df[df["Type"] == "Account"]
-dfs_df = df[df["Type"] == "Digital Financial Service Usage"]
+# Separate account and digital financial service usage data
+account_df = df[df["Type"] == "Account"].copy()
+dfs_df = df[df["Type"] == "Digital Financial Service Usage"].copy()
 
-# Create copies and clean indicators by removing text in parentheses
-new_account = account_df.copy()
-new_dfs = dfs_df.copy()
-new_account["Indicator"] = new_account["Indicator"].str.replace(r"\s*\(.*?\)", "", regex=True)
-new_dfs["Indicator"] = new_dfs["Indicator"].str.replace(r"\s*\(.*?\)", "", regex=True)
+# --- Keywords ---
+saving_keywords = ["save", "saved"]
+borrowing_keywords = ["borrow", "borrowing", "loan", "borrowed"]
 
-# Further breakdown by demographic group (all values as DataFrames — corrected)
+# Function to exclude saving and borrowing from a dataframe
+def exclude_saving_borrowing(df_):
+    return df_[~df_["Indicator"].str.contains('|'.join(saving_keywords + borrowing_keywords), case=False, na=False)]
+
+# Clean Account and DFS data before demographic split
+account_df = exclude_saving_borrowing(account_df)
+dfs_df = exclude_saving_borrowing(dfs_df)
+
+
+# Clean parentheses from indicator names
+account_df["Indicator"] = account_df["Indicator"].str.replace(r"\s*\(.*?\)", "", regex=True)
+dfs_df["Indicator"] = dfs_df["Indicator"].str.replace(r"\s*\(.*?\)", "", regex=True)
+
+# --- Strict demographic patterns ---
+age_pattern = r"\b(age[s]?\s*\d{2}(?:-\d{2}|\+)|young|older)\b"
+gender_pattern = r"\b(male|female)\b"
+education_pattern = r"(primary education|secondary education|tertiary education|no formal education|less than primary)"
+income_pattern = r"(poorest\s*\d+%|richest\s*\d+%|middle\s*\d+%)"
+
+# --- Filtered breakdown ---
 account_data = {
-    "Age": account_df[account_df["Indicator"].str.contains("Age", case=False, na=False)],
-    "Gender": new_account[new_account["Indicator"].str.contains("female|male", case=False, na=False)],
-    "Education": new_account[new_account["Indicator"].str.contains("Education", case=False, na=False)],
-    "Income": new_account[new_account["Indicator"].str.contains("Income", case=False, na=False)],
+    "Age": account_df[account_df["Indicator"].str.contains(age_pattern, case=False, regex=True)],
+    "Gender": account_df[account_df["Indicator"].str.contains(gender_pattern, case=False, regex=True)],
+    "Education": account_df[account_df["Indicator"].str.contains(education_pattern, case=False, regex=True)],
+    "Income": account_df[account_df["Indicator"].str.contains(income_pattern, case=False, regex=True)],
 }
 
 dfs_data = {
-    "Age": dfs_df[dfs_df["Indicator"].str.contains("Age", case=False, na=False)],
-    "Gender": new_dfs[new_dfs["Indicator"].str.contains("female|male", case=False, na=False)],
-    "Education": new_dfs[new_dfs["Indicator"].str.contains("Education", case=False, na=False)],
-    "Income": new_dfs[new_dfs["Indicator"].str.contains("Income", case=False, na=False)],
+    "Age": dfs_df[dfs_df["Indicator"].str.contains(age_pattern, case=False, regex=True)],
+    "Gender": dfs_df[dfs_df["Indicator"].str.contains(gender_pattern, case=False, regex=True)],
+    "Education": dfs_df[dfs_df["Indicator"].str.contains(education_pattern, case=False, regex=True)],
+    "Income": dfs_df[dfs_df["Indicator"].str.contains(income_pattern, case=False, regex=True)],
 }
+
+# --- Saving & Borrowing Keywords ---
+saving_keywords = ["save", "saved"]
+borrowing_keywords = ["borrow", "borrowing", "loan", "borrowed"]
+
+def filter_saving(df_):
+    return df_[df_["Indicator"].str.contains('|'.join(saving_keywords), case=False, na=False)]
+
+def filter_borrowing(df_):
+    return df_[df_["Indicator"].str.contains('|'.join(borrowing_keywords), case=False, na=False)]
+
+# Filter saving and borrowing separately with strict demographics
+saving_data = {
+    "Age": filter_saving(df[df["Indicator"].str.contains(age_pattern, case=False, regex=True)]),
+    "Gender": filter_saving(df[df["Indicator"].str.contains(gender_pattern, case=False, regex=True)]),
+    "Education": filter_saving(df[df["Indicator"].str.contains(education_pattern, case=False, regex=True)]),
+    "Income": filter_saving(df[df["Indicator"].str.contains(income_pattern, case=False, regex=True)]),
+}
+
+borrowing_data = {
+    "Age": filter_borrowing(df[df["Indicator"].str.contains(age_pattern, case=False, regex=True)]),
+    "Gender": filter_borrowing(df[df["Indicator"].str.contains(gender_pattern, case=False, regex=True)]),
+    "Education": filter_borrowing(df[df["Indicator"].str.contains(education_pattern, case=False, regex=True)]),
+    "Income": filter_borrowing(df[df["Indicator"].str.contains(income_pattern, case=False, regex=True)]),
+}
+
+# Clean parentheses for saving & borrowing indicators
+for group_dict in [saving_data, borrowing_data]:
+    for key in group_dict:
+        group_dict[key]["Indicator"] = group_dict[key]["Indicator"].str.replace(r"\s*\(.*?\)", "", regex=True)
+
+
+
 
 
 # --- Clean Barrier Indicator ---
@@ -261,7 +311,9 @@ def render_content(tab):
                 dbc.Col(dcc.Dropdown(
                     id='data-type',
                     options=[{"label": "Financial Account Ownership ", "value": "Account"},
-                             {"label": "Digital Financial Service Usage", "value": "Digital Financial Service Usage"}],
+                             {"label": "Digital Financial Service Usage", "value": "Digital Financial Service Usage"},
+                             {"label": "Saving Behavior", "value": "Saving"},
+                             {"label": "Borrowing Behavior", "value": "Borrowing"}],
                     value="Account", clearable=False
                 ), md=6),
                 dbc.Col(dcc.Dropdown(
@@ -318,6 +370,7 @@ def render_content(tab):
 
 
 # --- Trend Callback ---
+# --- Trend Callback ---
 @app.callback(
     Output("combined-trend", "figure"),
     [Input("indicator-dropdown", "value"),
@@ -342,13 +395,35 @@ def update_combined_trend(indicator, view):
         rwanda_df = rwanda_df[["Year", "Indicator value"]]
         rwanda_df["Source"] = "Rwanda"
         trend_data.append(rwanda_df)
+
     combined_df = pd.concat(trend_data)
-    fig = px.line(combined_df, x="Year", y="Indicator value", color="Source", markers=True)
+
+    green_palette_9 = [
+        "#144d14",  
+        "#4c9c54",  
+        "#7ac943",  
+        "#53a318",  
+        "#3d8910",  
+        "#2f6f0b",  
+        "#255d08",  
+        "#1a4505",  
+        "#113002"   
+    ]
+
+    fig = px.line(
+        combined_df,
+        x="Year",
+        y="Indicator value",
+        color="Source",
+        markers=True,
+        color_discrete_sequence=green_palette_9
+    )
     fig.update_layout(
         title_x=0.5,
         title_font=dict(size=20, family='Lato, sans-serif', color='#144d14', weight='bold')
     )
     return fig
+
 
 # --- Demographics Callback ---
 @app.callback(
@@ -357,7 +432,17 @@ def update_combined_trend(indicator, view):
      Input("demographic", "value")]
 )
 def update_demographic_graph(data_type, demographic):
-    df_selected = account_data.get(demographic) if data_type == "Account" else dfs_data.get(demographic)
+    if data_type == "Account":
+        df_selected = account_data.get(demographic)
+    elif data_type == "Digital Financial Service Usage":
+        df_selected = dfs_data.get(demographic)
+    elif data_type == "Saving":
+        df_selected = saving_data.get(demographic)
+    elif data_type == "Borrowing":
+        df_selected = borrowing_data.get(demographic)
+    else:
+        df_selected = pd.DataFrame()
+
     if df_selected is None or df_selected.empty:
         fig = px.bar(title="No data available.")
     else:
@@ -369,11 +454,13 @@ def update_demographic_graph(data_type, demographic):
             .head(20)
         )
         fig = px.bar(df_summary, x="Indicator value", y="Indicator", orientation="h", color_discrete_sequence=["#276749"])
+
     fig.update_layout(
         title_x=0.5,
         title_font=dict(size=20, family='Lato, sans-serif', color='#144d14', weight='bold')
     )
     return fig
+
 
 # --- Barriers Callback ---
 @app.callback(
@@ -427,10 +514,10 @@ def update_cluster_choropleth(selected_year, selected_country):
         3: "Advanced Access"
     }
     color_map = {
-        "Basic Access": "blue",
-        "Developing Access": "green",
-        "Growing Access": "red",
-        "Advanced Access": "purple"
+         "Basic Access": "#7bed9f",    
+         "Developing Access": "#2ecc71",  
+         "Growing Access": "#27ae60",   
+         "Advanced Access": "#145214" 
     }
 
     df_segmented["Segment Label"] = df_segmented["Segment"].map(segment_names)
@@ -479,10 +566,10 @@ def update_cluster_scatter(selected_year, selected_country):
         3: "Advanced Access"
     }
     color_map = {
-        "Basic Access": "blue",
-        "Developing Access": "green",
-        "Growing Access": "red",
-        "Advanced Access": "purple"
+      "Basic Access": "#7bed9f",    
+      "Developing Access": "#2ecc71",  
+      "Growing Access": "#27ae60",   
+      "Advanced Access": "#145214" 
     }
 
     df_segmented["Segment Label"] = df_segmented["Segment"].map(segment_names)
