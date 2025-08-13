@@ -26,10 +26,10 @@ file_id = '1CQOEn-YIGRwO_KUWBRD1myhExS7S2wI1'
 url = f'https://drive.google.com/uc?id={file_id}'
 
 # Download and save locally (temporary)
-gdown.download(url, 'temp.csv', quiet=False)
+gdown.download(url, 'world.csv', quiet=False)
 
 # Load the CSV
-df = pd.read_csv('temp.csv')
+df = pd.read_csv('world.csv')
 
 df["Indicator value"] = df["Indicator value"].astype(str).str.replace('%', '', regex=False).astype(float)
 
