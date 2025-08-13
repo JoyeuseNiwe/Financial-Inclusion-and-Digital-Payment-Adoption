@@ -1,0 +1,680 @@
+---
+title: Global Trends in Financial Inclusion and Digital Payment Adoption
+author:
+  - name: "Joyeuse , Eliane , Gemima"
+    affiliation: "Data Analysts"
+
+date: "2025-07-22"
+format: 
+  html:
+    page-layout: full
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    number-sections: true
+    number-tables: true
+    toc: true
+    toc-location: left
+    toc-title: Contents
+jupyter: python3
+---
+
+### *A Data-Driven Analysis Using the World Bank Global Findex Database (2021)*
+
+## Introduction
+
+Financial inclusion plays a pivotal role in driving economic growth and reducing poverty. By expanding access to essential financial services—such as savings accounts, credit, insurance, and payment systems—countries can empower individuals, support small businesses, and enhance economic resilience.
+
+With the rise of **digital financial services**—including mobile money, online banking, and digital payments—millions, particularly in **low- and middle-income countries**, are gaining unprecedented access to formal financial systems. These innovations have the potential to significantly narrow financial access gaps across regions and demographics.
+
+This project utilizes the **World Bank Global Findex Database 2021**, which provides comprehensive data on how adults worldwide save, borrow, make payments, and manage financial risk. The dataset includes information on:
+
+- Account ownership (bank and mobile money)
+- Digital payment usage (e.g., utility bills, wages, government transfers)
+- Savings and borrowing behavior
+- Barriers to account ownership
+- Demographic and socioeconomic characteristics
+
+Before conducting meaningful analysis, **data cleaning and preprocessing** are essential. This notebook focuses on preparing the raw dataset for analysis by:
+
+- Handling missing values
+- Renaming and restructuring columns
+- Creating derived variables where needed
+- Ensuring consistency in data types and formats
+
+These foundational steps will ensure the quality, accuracy, and usability of the data in subsequent phases of the project, including visualization, modeling, and insight generation.
+
+## Tools Used
+
+This notebook leverages:
+- `pandas` and `numpy` for data manipulation and cleaning
+- `plotly.express` for interactive visual exploration
+- Supplementary datasets (as needed) from ITU, GSMA, and World Bank Open Data
+
+---
+
+
+```{python}
+#| echo: false
+#| output: false
+import pandas as pd
+import os
+import numpy as np
+import plotly.express as px
+import warnings
+warnings.simplefilter(action='ignore', category=pd.errors.SettingWithCopyWarning)
+
+```
+
+## Load Dataset
+
+To begin the data cleaning process, we first load the dataset using the `os` and `pandas` libraries. The Excel file, `DatabankWide.xlsx`, is located in the current working directory.
+
+
+
+
+```{python}
+#| output: false
+curent_dir = os.getcwd()
+data_path =os.path.join(curent_dir, 'DatabankWide.xlsx')
+```
+
+##  Reading the Excel File
+
+We use `pandas.read_excel()` to load the dataset into a DataFrame named `df`. This function reads the Excel file located at the path specified earlier (`data_path`).
+
+
+
+```{python}
+#| echo: false
+#| output: false
+df = pd.read_excel(data_path)
+df
+```
+
+## Dataset Dimensions
+
+To understand the size of the dataset, we use the `.shape` attribute. This returns a tuple indicating the number of rows and columns in the DataFrame.
+
+
+
+```{python}
+#| echo: false
+#| output: false
+df.shape
+```
+
+##  Cleaning Country Names
+
+We want to ensure the dataset only includes valid countries. The following cleaning steps are performed on the `Country name` column:
+
+ **Remove rows with missing country names**  
+   We first drop any rows where the `Country name` is `NaN`.
+
+ **Remove entries that represent regions, income groups, or aggregates**  
+   Sometimes the dataset includes rows labeled as "World", "High income", "Europe & Central Asia", etc., which are not individual countries. We define a list of keywords and remove any rows where the `Country name` contains any of those terms (case-insensitive).
+
+
+
+```{python}
+#| echo: false
+#| output: false
+df = df[df['Country name'].notna()]
+
+# Remove rows where "Country name" is really a region or income group
+bad_keywords = ['income', 'world', 'region', 'OECD', 'Africa', 'Asia', 'America', 'Europe', 'Pacific', 'Arab']
+df = df[~df['Country name'].str.contains('|'.join(bad_keywords), case=False, na=False)]
+```
+
+##  Reshaping the Dataset to Long Format
+
+The original dataset is in a **wide format**, where each indicator (e.g., "% with account", "% receiving wage digitally") is a separate column. To make the data easier to analyze and visualize, we reshape it into a **long format** using `pd.melt()`.
+
+###  Steps:
+
+ **Define identifier columns (`id_cols`)**  
+   These are columns we want to keep as is (e.g., country info, year, demographics).
+
+ **Select indicator columns (`value_cols`)**  
+   We collect all columns that contain a **percentage (`%`)** and are not part of the identifier list.
+
+ **Use `pd.melt()`**  
+   This converts the DataFrame from wide to long format, where each row represents a country-indicator-value-year combination.
+
+ **Clean the 'Value' column**  
+   Convert the values to numeric, safely handling any non-numeric or missing entries.
+
+
+```{python}
+#| echo: false
+#| output: false
+id_cols = ['Country name', 'Country code', 'Year', 'Adult populaiton', 'Region', 'Income group']
+value_cols = [col for col in df.columns if '%' in str(col) and col not in id_cols]
+
+df_long = pd.melt(df, id_vars=id_cols, value_vars=value_cols,
+                  var_name='Indicator', value_name='Value')
+
+# Remove percent signs and convert to numeric
+# df_long['Value'] = df_long['Value'].astype(str).str.replace('%', '').str.strip()
+df_long['Value'] = pd.to_numeric(df_long['Value'], errors='coerce')
+```
+
+```{python}
+df_long
+```
+
+## Long Format Dataset Dimensions
+
+After reshaping the dataset from wide to long format using `pd.melt()`, we use the `.shape` attribute to check the number of rows and columns in the transformed DataFrame:
+
+
+```{python}
+#| echo: false
+#| output: false
+df_long.shape
+```
+
+##  Formatting Indicator Values as Percentages
+
+To make the indicator values easier to read and visualize, we format them as percentage strings:
+
+###  Steps:
+ **Convert the 'Value' column to float and scale**  
+   Since the raw values are in decimal form (e.g., 0.75), we multiply them by 100 to convert them into percentage values.
+
+ **Create a new column `Indicator value`**  
+   We round the percentage values to two decimal places and append the `%` sign to make them human-readable.
+
+ **Drop the original 'Value' column**  
+   After formatting, the original numeric column is no longer needed.
+
+
+```{python}
+#| echo: false
+#| output: false
+df_long['Value'] = df_long['Value'].astype(float) * 100
+df_long['Indicator value'] = df_long['Value'].round(2).astype(str) + '%'
+df_long.drop('Value', axis=1, inplace=True)
+```
+
+##  Dataset Overview with `.info()`
+
+To understand the structure of the cleaned and reshaped dataset, we use the `.info()` method. This provides:
+
+- Number of entries (rows)
+- Number of columns
+- Column names and their data types
+- Non-null (non-missing) counts for each column
+- Memory usage of the DataFrame
+
+
+
+```{python}
+#| echo: false
+#| output: false
+df_long.info()
+```
+
+## Summary Statistics 
+
+We use the `.describe()` method to generate descriptive statistics for the **numeric columns** in the dataset. This helps us understand the distribution of the percentage-based financial indicators.
+
+
+
+```{python}
+#| echo: false
+#| output: false
+df_long.describe()
+```
+
+##  Checking for Missing Values
+
+To identify missing data in the cleaned dataset, we use `.isnull().sum()`. This method returns the total number of missing (`NaN`) values in each column.
+
+```{python}
+#| echo: false
+#| output: false
+df_long.isnull().sum()
+```
+
+##  Exploring Unique Regions
+
+To understand the geographic coverage of the dataset, we examine the unique values in the `Region` column using `.unique()`. This reveals all distinct regions represented in the data.
+
+
+
+```{python}
+#| echo: false
+#| output: false
+df_long['Region'].unique()
+```
+
+## Cleaning the 'Region' Column
+
+We perform two key cleaning steps on the `Region` column to ensure consistent and meaningful region values:
+
+###  Steps:
+
+ **Remove rows with missing region values**  
+   These entries cannot be used in regional analysis, so we filter them out.
+
+ **Standardize region names**  
+   Some regions in the dataset include extra text like `"(excluding high income)"`, which is not needed for our analysis.  
+   We use a regular expression to remove this suffix and keep only the clean region name.
+
+
+```{python}
+#| echo: false
+#| output: false
+df_long = df_long.loc[df_long['Region'].notna()]
+df_long['Region'] = df_long['Region'].str.replace(r"\s*\(excluding high income\)", "", regex=True)
+```
+
+```{python}
+#| echo: false
+#| output: false
+df_long['Region'].unique()
+```
+
+##  Exploring Unique Country Names
+
+To review the countries represented in the dataset, we use `.unique()` on the `Country name` column. This returns a list of all distinct country names remaining after cleaning.
+
+
+```{python}
+#| echo: false
+#| output: false
+df_long['Country name'].unique()
+```
+
+##  Replacing 'High income' Regions with Actual Geographic Regions
+
+Some countries are labeled under the `Region` column as **"High income"**, which is not a geographic region but an income classification. To enhance regional analysis, we replace `"High income"` with the actual geographic region of the country using the steps below:
+
+###  Steps:
+
+ **Create a mapping from countries to regions (excluding 'High income')**  
+   - We filter out entries labeled `"High income"`.
+   - Group by `Country name` and extract the most common region per country using `.mode()`.
+   - Convert this into a dictionary (`country_region_map`) for easy lookup.
+
+ **Replace 'High income' with actual region**  
+   - We use `.apply()` to update each row:
+     - If the `Region` is `"High income"`, we look up the country’s correct region from the map.
+     - If the region is already valid, we keep it unchanged.
+
+
+```{python}
+#| echo: false
+#| output: false
+country_region_map = (
+    df_long[df_long['Region'].notna() & (df_long['Region'] != 'High income')]
+    .groupby('Country name')['Region']
+    .agg(lambda x: x.mode()[0])  # pick the most common region per country
+    .to_dict()
+)
+
+#  Replace "High income" in Region using this mapping
+df_long['Region'] = df_long.apply(
+    lambda row: country_region_map.get(row['Country name'], np.nan) if row['Region'] == 'High income' else row['Region'],
+    axis=1
+)
+```
+
+```{python}
+country_to_region = {
+    # South Asia
+    'Afghanistan': 'South Asia', 'Bangladesh': 'South Asia', 'Bhutan': 'South Asia', 'India': 'South Asia',
+    'Maldives': 'South Asia', 'Nepal': 'South Asia', 'Pakistan': 'South Asia', 'Sri Lanka': 'South Asia',
+
+    # Europe & Central Asia
+    'Albania': 'Europe & Central Asia', 'Armenia': 'Europe & Central Asia', 'Austria': 'Europe & Central Asia',
+    'Azerbaijan': 'Europe & Central Asia', 'Belarus': 'Europe & Central Asia', 'Belgium': 'Europe & Central Asia',
+    'Bosnia and Herzegovina': 'Europe & Central Asia', 'Bulgaria': 'Europe & Central Asia',
+    'Croatia': 'Europe & Central Asia', 'Czech Republic': 'Europe & Central Asia', 'Denmark': 'Europe & Central Asia',
+    'Estonia': 'Europe & Central Asia',
+    'Finland': 'Europe & Central Asia', 'France': 'Europe & Central Asia', 'Georgia': 'Europe & Central Asia',
+    'Germany': 'Europe & Central Asia', 'Greece': 'Europe & Central Asia', 'Hungary': 'Europe & Central Asia',
+    'Iceland': 'Europe & Central Asia', 'Ireland': 'Europe & Central Asia', 'Italy': 'Europe & Central Asia',
+    'Kazakhstan': 'Europe & Central Asia', 'Kosovo': 'Europe & Central Asia', 'Latvia': 'Europe & Central Asia',
+    'Lithuania': 'Europe & Central Asia', 'Moldova': 'Europe & Central Asia', 'Montenegro': 'Europe & Central Asia',
+    'Netherlands': 'Europe & Central Asia', 'North Macedonia': 'Europe & Central Asia', 'Norway': 'Europe & Central Asia',
+    'Poland': 'Europe & Central Asia', 'Portugal': 'Europe & Central Asia', 'Romania': 'Europe & Central Asia',
+    'Russian Federation': 'Europe & Central Asia', 'Serbia': 'Europe & Central Asia', 'Slovak Republic': 'Europe & Central Asia',
+    'Slovenia': 'Europe & Central Asia', 'Spain': 'Europe & Central Asia', 'Sweden': 'Europe & Central Asia',
+    'Switzerland': 'Europe & Central Asia', 'Turkey': 'Europe & Central Asia', 'Ukraine': 'Europe & Central Asia',
+    'United Kingdom': 'Europe & Central Asia',
+
+    # Sub-Saharan Africa
+    'Angola': 'Sub-Saharan Africa', 'Benin': 'Sub-Saharan Africa', 'Botswana': 'Sub-Saharan Africa',
+    'Burkina Faso': 'Sub-Saharan Africa', 'Burundi': 'Sub-Saharan Africa', 'Cabo Verde': 'Sub-Saharan Africa',
+    'Cameroon': 'Sub-Saharan Africa', 'Central African Republic': 'Sub-Saharan Africa', 'Chad': 'Sub-Saharan Africa',
+    'Comoros': 'Sub-Saharan Africa', 'Congo, Dem. Rep.': 'Sub-Saharan Africa', 'Congo, Rep.': 'Sub-Saharan Africa',
+    "Cote d'Ivoire": 'Sub-Saharan Africa', 'Djibouti': 'Sub-Saharan Africa', 'Equatorial Guinea': 'Sub-Saharan Africa',
+    'Eswatini': 'Sub-Saharan Africa', 'Ethiopia': 'Sub-Saharan Africa', 'Gabon': 'Sub-Saharan Africa',
+    'Gambia, The': 'Sub-Saharan Africa', 'Ghana': 'Sub-Saharan Africa', 'Guinea': 'Sub-Saharan Africa',
+    'Kenya': 'Sub-Saharan Africa', 'Lesotho': 'Sub-Saharan Africa', 'Liberia': 'Sub-Saharan Africa',
+    'Madagascar': 'Sub-Saharan Africa', 'Malawi': 'Sub-Saharan Africa', 'Mali': 'Sub-Saharan Africa',
+    'Mauritania': 'Sub-Saharan Africa', 'Mauritius': 'Sub-Saharan Africa', 'Mozambique': 'Sub-Saharan Africa',
+    'Namibia': 'Sub-Saharan Africa', 'Niger': 'Sub-Saharan Africa', 'Nigeria': 'Sub-Saharan Africa',
+    'Rwanda': 'Sub-Saharan Africa', 'Senegal': 'Sub-Saharan Africa', 'Sierra Leone': 'Sub-Saharan Africa',
+    'Somalia': 'Sub-Saharan Africa', 'South Africa': 'Sub-Saharan Africa', 'South Sudan': 'Sub-Saharan Africa',
+    'Sudan': 'Sub-Saharan Africa', 'Tanzania': 'Sub-Saharan Africa', 'Togo': 'Sub-Saharan Africa',
+    'Uganda': 'Sub-Saharan Africa', 'Zambia': 'Sub-Saharan Africa', 'Zimbabwe': 'Sub-Saharan Africa',
+
+    # East Asia & Pacific
+    'Australia': 'East Asia & Pacific', 'Cambodia': 'East Asia & Pacific', 'China': 'East Asia & Pacific',
+    'Indonesia': 'East Asia & Pacific', 'Japan': 'East Asia & Pacific', 'Korea, Rep.': 'East Asia & Pacific',
+    'Lao PDR': 'East Asia & Pacific', 'Malaysia': 'East Asia & Pacific', 'Mongolia': 'East Asia & Pacific',
+    'Myanmar': 'East Asia & Pacific', 'New Zealand': 'East Asia & Pacific', 'Philippines': 'East Asia & Pacific',
+    'Singapore': 'East Asia & Pacific', 'Thailand': 'East Asia & Pacific', 'Vietnam': 'East Asia & Pacific',
+    'Taiwan, China': 'East Asia & Pacific', 'Hong Kong SAR, China': 'East Asia & Pacific',
+
+    # Latin America & Caribbean
+    'Argentina': 'Latin America & Caribbean', 'Belize': 'Latin America & Caribbean', 'Bolivia': 'Latin America & Caribbean',
+    'Brazil': 'Latin America & Caribbean', 'Chile': 'Latin America & Caribbean', 'Colombia': 'Latin America & Caribbean',
+    'Costa Rica': 'Latin America & Caribbean', 'Cuba': 'Latin America & Caribbean', 'Dominican Republic': 'Latin America & Caribbean',
+    'Ecuador': 'Latin America & Caribbean', 'El Salvador': 'Latin America & Caribbean', 'Guatemala': 'Latin America & Caribbean',
+    'Haiti': 'Latin America & Caribbean', 'Honduras': 'Latin America & Caribbean', 'Jamaica': 'Latin America & Caribbean',
+    'Mexico': 'Latin America & Caribbean', 'Nicaragua': 'Latin America & Caribbean', 'Panama': 'Latin America & Caribbean',
+    'Paraguay': 'Latin America & Caribbean', 'Peru': 'Latin America & Caribbean', 'Puerto Rico': 'Latin America & Caribbean',
+    'Trinidad and Tobago': 'Latin America & Caribbean', 'Uruguay': 'Latin America & Caribbean', 'Venezuela, RB': 'Latin America & Caribbean',
+
+    # Middle East & North Africa
+    'Algeria': 'Middle East & North Africa', 'Bahrain': 'Middle East & North Africa', 'Egypt': 'Middle East & North Africa',
+    'Iran, Islamic Rep.': 'Middle East & North Africa', 'Iraq': 'Middle East & North Africa', 'Israel': 'Middle East & North Africa',
+    'Jordan': 'Middle East & North Africa', 'Kuwait': 'Middle East & North Africa', 'Lebanon': 'Middle East & North Africa',
+    'Libya': 'Middle East & North Africa', 'Morocco': 'Middle East & North Africa', 'Oman': 'Middle East & North Africa',
+    'Qatar': 'Middle East & North Africa', 'Saudi Arabia': 'Middle East & North Africa', 'Syrian Arab Republic': 'Middle East & North Africa',
+    'Tunisia': 'Middle East & North Africa', 'United Arab Emirates': 'Middle East & North Africa', 'West Bank and Gaza': 'Middle East & North Africa',
+    'Yemen, Rep.': 'Middle East & North Africa',
+
+    # North America
+    'United States': 'North America', 'Canada': 'North America',
+
+    # Other
+    'Luxembourg': 'Europe & Central Asia', 'Malta': 'Europe & Central Asia', 'Cyprus': 'Europe & Central Asia',
+    'Iceland': 'Europe & Central Asia',
+}
+```
+**Table: Mapping from `Country` to `Region`**
+
+| Country                    | Region                       |
+|---------------------------|------------------------------|
+| Afghanistan               | South Asia                   |
+| Bangladesh                | South Asia                   |
+| Bhutan                    | South Asia                   |
+| India                     | South Asia                   |
+| Maldives                  | South Asia                   |
+| Nepal                     | South Asia                   |
+| Pakistan                  | South Asia                   |
+| Sri Lanka                 | South Asia                   |
+| Albania                   | Europe & Central Asia        |
+| Armenia                   | Europe & Central Asia        |
+| Austria                   | Europe & Central Asia        |
+| Azerbaijan                | Europe & Central Asia        |
+| Belarus                   | Europe & Central Asia        |
+| Belgium                   | Europe & Central Asia        |
+| Bosnia and Herzegovina    | Europe & Central Asia        |
+| Bulgaria                  | Europe & Central Asia        |
+| Croatia                   | Europe & Central Asia        |
+| Czech Republic            | Europe & Central Asia        |
+| Denmark                   | Europe & Central Asia        |
+| Estonia                   | Europe & Central Asia        |
+| Finland                   | Europe & Central Asia        |
+| France                    | Europe & Central Asia        |
+| Georgia                   | Europe & Central Asia        |
+| Germany                   | Europe & Central Asia        |
+| Greece                    | Europe & Central Asia        |
+| Hungary                   | Europe & Central Asia        |
+| Iceland                   | Europe & Central Asia        |
+| Ireland                   | Europe & Central Asia        |
+| Italy                     | Europe & Central Asia        |
+| Kazakhstan                | Europe & Central Asia        |
+| Kosovo                    | Europe & Central Asia        |
+| Latvia                    | Europe & Central Asia        |
+| Lithuania                 | Europe & Central Asia        |
+| Moldova                   | Europe & Central Asia        |
+| Montenegro                | Europe & Central Asia        |
+| Netherlands               | Europe & Central Asia        |
+| North Macedonia           | Europe & Central Asia        |
+| Norway                    | Europe & Central Asia        |
+| Poland                    | Europe & Central Asia        |
+| Portugal                  | Europe & Central Asia        |
+| Romania                   | Europe & Central Asia        |
+| Russian Federation        | Europe & Central Asia        |
+| Serbia                    | Europe & Central Asia        |
+| Slovak Republic           | Europe & Central Asia        |
+| Slovenia                  | Europe & Central Asia        |
+| Spain                     | Europe & Central Asia        |
+| Sweden                    | Europe & Central Asia        |
+| Switzerland               | Europe & Central Asia        |
+| Turkey                    | Europe & Central Asia        |
+| Ukraine                   | Europe & Central Asia        |
+| United Kingdom            | Europe & Central Asia        |
+| Angola                    | Sub-Saharan Africa           |
+| Benin                     | Sub-Saharan Africa           |
+| Botswana                  | Sub-Saharan Africa           |
+| Burkina Faso              | Sub-Saharan Africa           |
+| Burundi                   | Sub-Saharan Africa           |
+| Cabo Verde                | Sub-Saharan Africa           |
+| Cameroon                  | Sub-Saharan Africa           |
+| Central African Republic  | Sub-Saharan Africa           |
+| Chad                      | Sub-Saharan Africa           |
+| Comoros                   | Sub-Saharan Africa           |
+| Congo, Dem. Rep.          | Sub-Saharan Africa           |
+| Congo, Rep.               | Sub-Saharan Africa           |
+| Cote d'Ivoire             | Sub-Saharan Africa           |
+| Djibouti                  | Sub-Saharan Africa           |
+| Equatorial Guinea         | Sub-Saharan Africa           |
+| Eswatini                  | Sub-Saharan Africa           |
+| Ethiopia                  | Sub-Saharan Africa           |
+| Gabon                     | Sub-Saharan Africa           |
+| Gambia, The               | Sub-Saharan Africa           |
+| Ghana                     | Sub-Saharan Africa           |
+| Guinea                    | Sub-Saharan Africa           |
+| Kenya                     | Sub-Saharan Africa           |
+| Lesotho                   | Sub-Saharan Africa           |
+| Liberia                   | Sub-Saharan Africa           |
+| Madagascar                | Sub-Saharan Africa           |
+| Malawi                    | Sub-Saharan Africa           |
+| Mali                      | Sub-Saharan Africa           |
+| Mauritania                | Sub-Saharan Africa           |
+| Mauritius                 | Sub-Saharan Africa           |
+| Mozambique                | Sub-Saharan Africa           |
+| Namibia                   | Sub-Saharan Africa           |
+| Niger                     | Sub-Saharan Africa           |
+| Nigeria                   | Sub-Saharan Africa           |
+| Rwanda                    | Sub-Saharan Africa           |
+| Senegal                   | Sub-Saharan Africa           |
+| Sierra Leone              | Sub-Saharan Africa           |
+| Somalia                   | Sub-Saharan Africa           |
+| South Africa              | Sub-Saharan Africa           |
+| South Sudan               | Sub-Saharan Africa           |
+| Sudan                     | Sub-Saharan Africa           |
+| Tanzania                  | Sub-Saharan Africa           |
+| Togo                      | Sub-Saharan Africa           |
+| Uganda                    | Sub-Saharan Africa           |
+| Zambia                    | Sub-Saharan Africa           |
+| Zimbabwe                  | Sub-Saharan Africa           |
+| Australia                 | East Asia & Pacific          |
+| Cambodia                  | East Asia & Pacific          |
+| China                     | East Asia & Pacific          |
+| Indonesia                 | East Asia & Pacific          |
+| Japan                     | East Asia & Pacific          |
+| Korea, Rep.               | East Asia & Pacific          |
+| Lao PDR                   | East Asia & Pacific          |
+| Malaysia                  | East Asia & Pacific          |
+| Mongolia                  | East Asia & Pacific          |
+| Myanmar                   | East Asia & Pacific          |
+| New Zealand               | East Asia & Pacific          |
+| Philippines               | East Asia & Pacific          |
+| Singapore                 | East Asia & Pacific          |
+| Thailand                  | East Asia & Pacific          |
+| Vietnam                   | East Asia & Pacific          |
+| Taiwan, China             | East Asia & Pacific          |
+| Hong Kong SAR, China      | East Asia & Pacific          |
+| Argentina                 | Latin America & Caribbean    |
+| Belize                    | Latin America & Caribbean    |
+| Bolivia                   | Latin America & Caribbean    |
+| Brazil                    | Latin America & Caribbean    |
+| Chile                     | Latin America & Caribbean    |
+| Colombia                  | Latin America & Caribbean    |
+| Costa Rica                | Latin America & Caribbean    |
+| Cuba                      | Latin America & Caribbean    |
+| Dominican Republic        | Latin America & Caribbean    |
+| Ecuador                   | Latin America & Caribbean    |
+| El Salvador               | Latin America & Caribbean    |
+| Guatemala                 | Latin America & Caribbean    |
+| Haiti                     | Latin America & Caribbean    |
+| Honduras                  | Latin America & Caribbean    |
+| Jamaica                   | Latin America & Caribbean    |
+| Mexico                    | Latin America & Caribbean    |
+| Nicaragua                 | Latin America & Caribbean    |
+| Panama                    | Latin America & Caribbean    |
+| Paraguay                  | Latin America & Caribbean    |
+| Peru                      | Latin America & Caribbean    |
+| Puerto Rico               | Latin America & Caribbean    |
+| Trinidad and Tobago       | Latin America & Caribbean    |
+| Uruguay                   | Latin America & Caribbean    |
+| Venezuela, RB             | Latin America & Caribbean    |
+| Algeria                   | Middle East & North Africa   |
+| Bahrain                   | Middle East & North Africa   |
+| Egypt                     | Middle East & North Africa   |
+| Iran, Islamic Rep.        | Middle East & North Africa   |
+| Iraq                      | Middle East & North Africa   |
+| Israel                    | Middle East & North Africa   |
+| Jordan                    | Middle East & North Africa   |
+| Kuwait                    | Middle East & North Africa   |
+| Lebanon                   | Middle East & North Africa   |
+| Libya                     | Middle East & North Africa   |
+| Morocco                   | Middle East & North Africa   |
+| Oman                      | Middle East & North Africa   |
+| Qatar                     | Middle East & North Africa   |
+| Saudi Arabia              | Middle East & North Africa   |
+| Syrian Arab Republic      | Middle East & North Africa   |
+| Tunisia                   | Middle East & North Africa   |
+| United Arab Emirates      | Middle East & North Africa   |
+| West Bank and Gaza        | Middle East & North Africa   |
+| Yemen, Rep.               | Middle East & North Africa   |
+| United States             | North America                |
+| Canada                    | North America                |
+| Luxembourg                | Europe & Central Asia        |
+| Malta                     | Europe & Central Asia        |
+| Cyprus                    | Europe & Central Asia        |
+
+## Verifying Cleaned Region Names
+
+After replacing `"High income"` with actual geographic regions, we use `.unique()` to inspect the final list of distinct region names in the dataset:
+
+
+```{python}
+#| echo: false
+#| output: false
+df_long['Region'].unique()
+```
+
+##  Filling Missing or 'High income' Regions Using Country Mapping
+
+Despite previous cleaning steps, some rows  still have missing region  To fix this, we use a dictionary (`country_to_region`) that maps each country to its correct geographic region.
+
+###  Logic:
+
+- If a row’s `Region` is `NaN` **or** `"High income"`, we replace it using the mapped region from `country_to_region`.
+- If the `Region` is already valid, we leave it unchanged.
+
+
+```{python}
+df_long['Region'] = df_long.apply(
+    lambda row: country_to_region.get(row['Country name'], row['Region']) 
+    if pd.isna(row['Region']) or row['Region'] == 'High income' 
+    else row['Region'], 
+    axis=1
+)
+```
+
+##  Final Check for Missing Values
+
+After completing the region corrections and other data cleaning steps, we perform a final check for missing values in the dataset using `.isnull().sum()
+
+```{python}
+#| echo: false
+#| output: false
+df_long.isnull().sum()
+```
+
+##  Correcting Income Group for Specific Countries
+
+venezuela were missing `Income group` labels in the dataset. To fix this, we manually update entries using a mapping dictionary.
+
+- We explicitly map `'Venezuela, RB'` to `'Upper-Middle-Income'`.
+
+
+
+```{python}
+#| echo: false
+#| output: false
+income_group_mapping = {
+    'Venezuela, RB': 'Upper-Middle-Income'
+}
+df_long['Income group'] = df_long['Country name'].map(income_group_mapping).fillna(df_long['Income group'])
+```
+
+Check again for null values
+
+```{python}
+#| echo: false
+#| output: false
+df_long.isnull().sum()
+```
+
+##  Checking for Duplicate Rows
+
+To ensure data quality and avoid biased analysis, we check for duplicate rows in the dataset using `.duplicated().sum()`.
+
+
+```{python}
+#| echo: false
+#| output: false
+df_long.duplicated().sum()
+```
+
+## Exploring Unique Financial Indicators
+
+To understand the scope of financial indicators available in the dataset, we examine the unique values in the `Indicator` column using `.unique()`.
+
+
+```{python}
+#| echo: false
+#| output: false
+df_long['Indicator'].unique()
+```
+
+##  Renaming Columns for Clarity and Consistency
+
+To correct a typo and improve readability, we rename the column `'Adult populaiton'` to `'Adult Population'`.
+
+```{python}
+#| echo: false
+#| output: false
+df_long.columns
+```
+
+```{python}
+#| echo: false
+#| output: false
+df_long.rename(columns={'Adult populaiton': 'Adult Population'}, inplace=True)
+```
+
+##  Exporting Cleaned Data
+
+After completing data cleaning and transformation, we save the cleaned dataset to a CSV file for future use or sharing.
+
+
+```{python}
+ df_long.to_csv("world data.csv",index=False)
+```
+
+

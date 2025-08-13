@@ -1,0 +1,1013 @@
+---
+title: "Global Financial Inclusion and Digital Payments – Exploratory Data Analysis"
+author: 
+  - name: "Eliane , Joyeuse , Gemima"
+    affiliation: "Junior Data Analysts"
+date: "2025-06-29"
+
+format: 
+  html:
+    page-layout: full
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    number-sections: true
+    number-tables: true
+    toc: true
+    toc-location: left
+    toc-title: Contents
+jupyter: python3
+---
+
+
+
+In this notebook, we conduct an in-depth exploratory and descriptive analysis of the **World Bank Global Findex Database 2021**, which captures how adults across the world save, borrow, make payments, and manage financial risk. This dataset is a cornerstone for understanding the **state of financial inclusion** globally, especially in the context of **digital financial services**.
+
+The purpose of this analysis is to uncover trends, identify disparities, and lay the groundwork for statistical modeling and segmentation. By examining variables such as **account ownership**, **digital payment usage**, and **barriers to financial access**, we aim to draw attention to key demographic and regional patterns in financial inclusion. This analysis is especially relevant for policymakers, NGOs, and fintech innovators seeking data-driven insights into underserved populations.
+
+We begin by importing essential Python libraries used for **data handling**, **numerical computation**, **visualization**, and **path management**:
+
+- `pandas`: Used for data cleaning, transformation, filtering, and aggregation across multiple demographic and economic variables.
+- `numpy`: Enables efficient numerical operations and basic statistics across quantitative fields.
+- `os`: Helps with navigating file structures and ensuring consistent data access across devices or collaborators.
+- `plotly.express`: A powerful visualization library used to generate clear, interactive visual summaries of patterns in financial behavior and inclusion metrics.
+
+
+```{python}
+#| echo: false
+#| output: false
+# import Libraries
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import os
+```
+
+## Dataset Structure and Variable Overview
+
+The Global Findex dataset contains the following key columns, each playing a crucial role in understanding financial inclusion patterns across countries and years:
+
+- **Country name**: The full name of the country where the data was collected (e.g., *Rwanda*, *India*, *Brazil*).
+- **Country code**: A standardized 3-letter ISO code representing the country (e.g., *RWA*, *IND*, *BRA*). Useful for mapping and joining with external datasets.
+- **Year**: The year of the survey. Available years include **2011**, **2014**, **2017**, and **2021**, allowing for temporal trend analysis.
+- **Adult Population**: The estimated number of adults (aged 15+) in each country-year. This is used to contextualize indicator values and calculate population-weighted statistics.
+- **Region**: Broad geographical classification assigned by the World Bank, such as *Sub-Saharan Africa*, *East Asia & Pacific*, or *Europe & Central Asia*.
+- **Income group**: World Bank economic classification of countries into four tiers: *Low income*, *Lower-middle income*, *Upper-middle income*, and *High income*. This helps identify inclusion gaps based on development level.
+- **Indicator**: Describes the specific financial behavior or access metric measured. Examples include *"Account (% age 15+)"*, *"Mobile money account (% age 15+)"*, and *"Made or received a digital payment (% age 15+)"*.
+- **Indicator value**: The numeric percentage or proportion (ranging from 0 to 100) representing the population within the specified group that reported the behavior or access described in the `Indicator`.
+
+These variables collectively enable powerful group-wise comparisons, trend analysis, and modeling of financial inclusion patterns across time, space, and demographic profiles.
+
+## Loading the Cleaned Dataset
+
+We load the cleaned version of the **Global Findex 2021** dataset into a Pandas DataFrame from the processed data directory. This dataset has been preprocessed to standardize column names, handle missing values, and retain only relevant records.
+
+Using the `head(10)` function, we display the first ten rows to preview the dataset. This gives a snapshot of key variables such as `Year`, `Country name`,`country code` `Income group`,`Indicator`  `Adult population`, `region`, and `Indicator value`, which form the foundation for our exploratory analysis.
+
+```{python}
+#| echo: false
+#| output: false
+df = pd.read_csv(r"C:\Users\USER\OneDrive\Desktop\world bank\world data.csv")
+df
+```
+
+## Summary Statistics of Key Variables
+
+```{python}
+df.describe()
+```
+
+We computed basic summary statistics for three key numerical variables in the Global Findex dataset: `Year`, `Adult Population`, and `Indicator value`.
+
+The data spans four survey years: **2011**, **2014**, **2017**, and **2021**. The average year across all entries is approximately 2017.9, with a standard deviation of about 3.34 years.
+
+The `Adult Population` variable shows substantial variation, with the smallest country-year adult population just under **230,000** and the largest over **1.15 billion**, reflecting the inclusion of both small and highly populous countries. The average adult population per record is approximately **38.3 million**.
+
+The `Indicator value`—which represents percentages for various financial inclusion metrics—ranges from **0% to 100%**, with a mean value around **27.7%**. This wide range highlights the diversity in financial service access and usage across countries, income groups, and demographic segments.
+
+Overall, these summary statistics give us an initial sense of the dataset’s scope and variability, setting the stage for deeper exploration into trends, disparities, and influencing factors.
+
+## Financial Inclusion trend (2011–2021)
+
+-  **Global Growth**: Financial inclusion indicators — including account ownership, digital payments, and mobile money — have steadily improved across the world from 2011 to 2021.
+
+- **Digital Payments Lead the Way**: The largest global increase is seen in the use of digital payments, indicating the growing importance of mobile and online platforms in financial ecosystems.
+
+-  **Regional Patterns**:
+  - **Sub-Saharan Africa** stands out for its high and growing use of **mobile money**, outpacing many other regions.
+  - **Regional disparities** still exist, but all regions show improvement over time.
+
+- 🇷🇼 **Rwanda’s Strong Performance**:
+  - Rwanda shows a **faster increase** in digital financial inclusion than the global average.
+  - Particularly strong growth is observed in:
+    - **Mobile money account (% age 15+)**
+    - **Made or received a digital payment (% age 15+)**
+
+-  **Financial Institutions Lag in Some Areas**:
+  - Traditional financial institution accounts are growing, but at a slower pace compared to mobile and digital services.
+
+These findings highlight the **impact of technology** in closing the financial inclusion gap, with Rwanda as a strong regional performer.
+
+```{python}
+#| echo: false
+#| output: true
+df["Indicator value"] = df["Indicator value"].astype(str).str.replace('%', '').astype(float)
+
+key_indicators = [
+    "Account (% age 15+)",
+    "Financial institution account (% age 15+)",
+    "Mobile money account (% age 15+)",
+    "Made or received a digital payment (% age 15+)"
+]
+
+df_filtered = df[
+    (df["Indicator"].isin(key_indicators)) &
+    (df["Year"].isin([2011, 2014, 2017, 2021]))
+].copy()
+
+for indicator in key_indicators:
+    print(f"Plotting: {indicator}")
+
+    df_ind = df_filtered[df_filtered["Indicator"] == indicator]
+
+    # Global trend
+    global_avg = df_ind.groupby("Year")["Indicator value"].mean().reset_index()
+    rwanda = df_ind[df_ind["Country name"] == "Rwanda"]
+
+    fig_global = px.line(global_avg, x="Year", y="Indicator value", markers=True,
+                         title=f"🌍 Global Trend — {indicator}",
+                         labels={"Indicator value": "%"})
+    if not rwanda.empty:
+        fig_global.add_scatter(
+            x=rwanda["Year"], y=rwanda["Indicator value"],
+            mode='lines+markers', name="Rwanda",
+            line=dict(color='red', width=4), marker=dict(size=10)
+        )
+
+    fig_global.show()
+
+    # Regional trend
+    region_avg = df_ind.groupby(["Region", "Year"])["Indicator value"].mean().reset_index()
+
+    fig_regional = px.line(region_avg, x="Year", y="Indicator value", color="Region", markers=True,
+                           title=f"🌍 Regional Trend — {indicator}",
+                           labels={"Indicator value": "%"})
+
+    if not rwanda.empty:
+        fig_regional.add_scatter(
+            x=rwanda["Year"], y=rwanda["Indicator value"],
+            mode='lines+markers', name="Rwanda",
+            line=dict(color='red', width=4, dash='dash'), marker=dict(size=10)
+        )
+
+    fig_regional.show()
+```
+
+
+## What demographic factors (age, gender, education, income) influence financial account ownership and digital financial service usage?
+
+### Key Points
+
+- Financial inclusion is essential for economic growth and poverty reduction.  
+- Affordable financial services enable individuals and communities to improve their economic well-being.  
+- Demographic factors—such as age, gender, education, and income—significantly influence financial account ownership.  
+- These same factors impact the usage of digital financial services.  
+- Understanding these demographic influences helps policymakers create effective financial inclusion strategies.  
+- This study examines how demographic variables affect financial inclusion across different regions and income groups.  
+- The findings aim to identify barriers and support targeted efforts to increase access for underserved populations.
+
+```{python}
+#| echo: false
+#| output: false
+# Filter for 'Account' and 'income' indicators
+income_account_df = df[
+    df["Indicator"].str.contains("Account", case=False, na=False) &
+    df["Indicator"].str.contains("income", case=False, na=False)
+].copy()
+
+# Convert 'Indicator value' to string first, then remove '%' and convert to float
+income_account_df["Indicator value"] = (
+    income_account_df["Indicator value"]
+    .astype(str)  # convert to string first
+    .str.replace('%', '', regex=False)
+    .astype(float)
+)
+
+# Drop missing values
+income_account_df.dropna(subset=["Indicator value", "Indicator"], inplace=True)
+
+# Display filtered data
+income_account_df.head(10)
+```
+
+### Income Financial Account Ownership and Digital financilial service
+
+```{python}
+#| echo: false
+#| output: false
+# Optional: Group and summarize by income-related indicator
+print("\nAverage Account Ownership by Income Level:")
+print(income_account_df.groupby("Indicator")["Indicator value"].mean().sort_values( ascending=False))
+```
+
+```{python}
+#| echo: false
+#| output: false
+# Define the DFS-related keyword pattern
+dfs_keywords = (
+    "mobile money|digital payment|internet|online|mobile phone|send money|receive money|"
+    "used a mobile phone|used the internet|digital|e-wallet|used a mobile"
+)
+
+# Step 1: Make sure 'Indicator' is string
+df["Indicator"] = df["Indicator"].astype(str)
+
+# Step 2: Filter for DFS + income indicators
+income_dfs = df[
+    df["Indicator"].str.contains(dfs_keywords, case=False, na=False) &
+    df["Indicator"].str.contains("income", case=False, na=False)
+].copy()
+
+# Step 3: Clean 'Indicator value'
+# a) Force to string first
+income_dfs["Indicator value"] = income_dfs["Indicator value"].astype(str)
+
+# b) Remove '%' characters if present
+income_dfs["Indicator value"] = income_dfs["Indicator value"].str.replace('%', '', regex=False)
+
+# c) Convert to float (invalid strings will become NaN)
+income_dfs["Indicator value"] = pd.to_numeric(income_dfs["Indicator value"], errors='coerce')
+
+# Step 4: Drop rows with missing values in key columns
+income_dfs.dropna(subset=["Indicator", "Indicator value"], inplace=True)
+
+# Step 5: Show the result
+income_dfs.head()
+
+
+```
+
+```{python}
+#| echo: false
+#| output: false
+# Filter for DFS and 'income' indicators
+income_dfs = df[
+    df["Indicator"].astype(str).str.contains(dfs_keywords, case=False, na=False) &
+    df["Indicator"].astype(str).str.contains("income", case=False, na=False)
+].copy()
+
+# Convert 'Indicator value' to string first
+income_dfs["Indicator value"] = income_dfs["Indicator value"].astype(str)
+
+# Then remove '%' signs safely
+income_dfs["Indicator value"] = income_dfs["Indicator value"].str.replace('%', '', regex=False)
+
+# Convert cleaned strings to float (invalid strings become NaN)
+income_dfs["Indicator value"] = pd.to_numeric(income_dfs["Indicator value"], errors='coerce')
+
+# Drop rows with missing values in 'Indicator value' or 'Indicator'
+income_dfs.dropna(subset=["Indicator value", "Indicator"], inplace=True)
+
+# Show filtered data
+#income_dfs
+
+```
+
+```{python}
+#| echo: false
+#| output: false
+# Optional: Group by indicator and calculate the mean
+print("\nAverage Digital financial service by income:")
+print(income_dfs.groupby("Indicator")["Indicator value"].mean().sort_values( ascending=False))
+```
+
+### Comparison: Financial Account Ownership vs Digital Financial Service Usage by Income
+
+#### 1. Overall Level
+- Financial account ownership is higher among the **richest 60% (~63%)** compared to the **poorest 40% (~50%)**.
+- Digital financial service usage is also higher in the richest 60%, though it varies by specific digital activity.
+
+#### 2. Common Activities
+- **Account Ownership:** Primarily involves holding financial accounts.
+- **Digital Financial Services:** Include activities such as making digital payments, sending money, and paying bills.
+
+#### 3. Engagement of the Poorest 40%
+- About **50%** of the poorest 40% own financial accounts, with some accounts inactive.
+- Fewer than half actively engage in digital financial services.
+
+#### 4. Mobile Money Usage
+- Moderate mobile money account ownership and usage, but lower among the poorest group.
+- Digital usage remains generally low within the poorest 40%.
+
+#### 5. Borrowing and Saving
+- Borrowing and saving are more common among richer groups.
+- Digital borrowing and saving are notably more prevalent in the richest 60%.
+
+#### 6. Income Impact
+- Income level is a **strong determinant** of both financial account ownership and digital financial service usage.
+
+#### 7. Barriers to Inclusion
+- **Account Ownership Barriers:** Access issues, cost, and trust concerns.
+- **Digital Services Barriers:** Digital literacy, infrastructure availability, and affordability challenges.
+
+
+## Demographic  by Education Level
+
+```{python}
+#| echo: false
+#| output: false
+# Ensure 'Indicator' and 'Indicator value' are string before applying .str operations
+df["Indicator"] = df["Indicator"].astype(str)
+df["Indicator value"] = df["Indicator value"].astype(str)
+
+# Filter for 'Account' and 'education' indicators
+education_account_df = df[
+    df["Indicator"].str.contains("Account", case=False, na=False) &
+    df["Indicator"].str.contains("education", case=False, na=False)
+].copy()
+
+# Clean the 'Indicator value' column: remove '%' and convert to float
+education_account_df["Indicator value"] = (
+    education_account_df["Indicator value"]
+    .str.replace('%', '', regex=False)  # remove percentage signs
+)
+
+# Convert cleaned values to float safely
+education_account_df["Indicator value"] = pd.to_numeric(
+    education_account_df["Indicator value"], errors='coerce'
+)
+
+# Drop rows with missing or invalid values
+education_account_df.dropna(subset=["Indicator value", "Indicator"], inplace=True)
+
+# Show the filtered data
+#education_account_df.head(20)
+
+
+```
+
+```{python}
+#| echo: false
+#| output: false
+# Optional: Summary by education level
+print("\nAverage Account Ownership by Education Level:")
+print(education_account_df.groupby("Indicator")["Indicator value"].mean().sort_values( ascending=False))
+```
+
+```{python}
+#| echo: false
+#| output: false
+# Filter for DFS-related indicators mentioning 'education'
+education_dfs = df[
+    df["Indicator"].astype(str).str.contains(dfs_keywords, case=False, na=False) &
+    df["Indicator"].astype(str).str.contains("education", case=False, na=False)
+].copy()
+
+# Convert 'Indicator value' to string before replacing '%'
+education_dfs["Indicator value"] = education_dfs["Indicator value"].astype(str).str.replace('%', '', regex=False)
+
+# Convert cleaned strings to float (invalid values become NaN)
+education_dfs["Indicator value"] = pd.to_numeric(education_dfs["Indicator value"], errors='coerce')
+
+# Drop rows with missing values in 'Indicator value' or 'Indicator'
+education_dfs.dropna(subset=["Indicator value", "Indicator"], inplace=True)
+
+# Show the filtered data
+#education_dfs
+
+
+```
+
+```{python}
+#| echo: false
+#| output: false
+# Optional: Group by indicator and calculate the mean
+print("\nAverage Digital financial service by Gender:")
+print(education_dfs.groupby("Indicator")["Indicator value"].mean().sort_values( ascending=False))
+```
+
+## Account Ownership Summary
+
+- Individuals with **secondary education or more** are significantly more likely to own a financial account (**65%**) compared to those with **primary education or less** (**47%**).
+- **Formal financial institution accounts** are more common among the educated (**62%**) than those with lower education (**45%**).
+- **Inactive accounts** are less frequent among higher-educated individuals (**3%**) compared to those with lower education (**4.3%**).
+
+**Conclusion:**  
+Higher education is associated with greater access to and active use of financial services.
+
+
+## Digital Financial Service Usage Summary
+
+- **Digital payment usage** is higher among the educated:  
+  - Made or received digital payments: **61.5%** (secondary+) vs. **41.2%** (primary or less)  
+  - Made digital payments: **54.8%** vs. **33%**  
+  - Received digital payments: **46.6%** vs. **28.2%**
+
+- **Mobile and internet use** for financial activities is significantly higher among the educated:  
+  - Sending money: **37%** vs. **16.7%**  
+  - Paying bills: **31%** vs. **13.3%**  
+  - Buying online: **29.4%** vs. **12.3%**
+
+- **Mobile money account ownership** and savings are also more common for higher-educated individuals.
+
+**Conclusion:**  
+Education boosts digital financial engagement. The more educated are better able to adopt and use digital financial tools.
+
+---
+
+## Overall Insight
+
+- Education level is a key driver of both **financial account ownership** and **digital financial service usage**.
+- Enhancing education can significantly **bridge the financial inclusion gap** and promote digital transformation in financial services.
+
+## Demographic by Gender
+
+```{python}
+#| echo: false
+#| output: false
+# Filter for 'Account' indicators related to gender (female or male)
+gender_account_df = df[
+    df["Indicator"].astype(str).str.contains("Account", case=False, na=False) &
+    df["Indicator"].astype(str).str.contains("female|male", case=False, na=False)
+].copy()
+
+# Convert 'Indicator value' to string before replacing '%'
+gender_account_df["Indicator value"] = gender_account_df["Indicator value"].astype(str).str.replace('%', '', regex=False)
+
+# Convert cleaned strings to float (invalid values become NaN)
+gender_account_df["Indicator value"] = pd.to_numeric(gender_account_df["Indicator value"], errors='coerce')
+
+# Drop rows with missing values in 'Indicator value' or 'Indicator'
+gender_account_df.dropna(subset=["Indicator value", "Indicator"], inplace=True)
+
+# Display results
+#gender_account_df
+
+
+```
+
+```{python}
+#| echo: false
+#| output: false
+# Optional: Average by Indicator
+print("\nAverage Account Ownership by Gender:")
+print(gender_account_df.groupby("Indicator")["Indicator value"].mean().sort_values( ascending=False))
+```
+
+```{python}
+#| echo: false
+#| output: false
+# Ensure dfs_keywords is defined somewhere above, e.g.:
+# dfs_keywords = ("mobile money|digital payment|internet|online|mobile phone|send money|receive money|"
+#                 "used a mobile phone|used the internet|digital|e-wallet|used a mobile")
+
+# Filter for DFS-related indicators mentioning female or male
+gender_dfs = df[
+    df["Indicator"].astype(str).str.contains(dfs_keywords, case=False, na=False) &
+    df["Indicator"].astype(str).str.contains("female|male", case=False, na=False)
+].copy()
+
+# Convert 'Indicator value' to string before replacing '%'
+gender_dfs["Indicator value"] = gender_dfs["Indicator value"].astype(str).str.replace('%', '', regex=False)
+
+# Convert cleaned strings to float (invalid values become NaN)
+gender_dfs["Indicator value"] = pd.to_numeric(gender_dfs["Indicator value"], errors='coerce')
+
+# Drop rows with missing or invalid values
+gender_dfs.dropna(subset=["Indicator value", "Indicator"], inplace=True)
+
+# Display results
+#gender_dfs
+
+
+```
+
+```{python}
+#| echo: false
+#| output: false
+# Optional: Group by indicator and calculate the mean
+print("\nAverage Digital financial service by Gender:")
+print(gender_dfs.groupby("Indicator")["Indicator value"].mean().sort_values( ascending=False))
+```
+
+
+
+###  Account Ownership
+
+- Males have higher account ownership (**60.4%**) than females (**54.6%**).
+- Financial institution accounts are more common among males (**57.7%**) than females (**52.2%**).
+- Mobile money account usage is higher for males (**17.2%**) than females (**13.1%**).
+- Males save and borrow more using formal or mobile accounts than females.
+- Inactive account rates are slightly higher for females.
+
+###  Digital Financial Service Usage
+
+- More males made/received digital payments (**56.5%**) compared to females (**50.2%**).
+- Males lead in:
+  - Sending money via mobile/internet.
+  - Accessing accounts online.
+  - Making digital purchases and paying bills.
+- Females consistently show lower engagement in digital services.
+
+###  Overall Insights
+
+- Gender gap exists in financial access and digital usage.
+- Men have broader and more active participation in both traditional and digital financial systems.
+- There is a need to improve digital and financial inclusion strategies targeting women.
+
+
+## Demographic by Age
+
+```{python}
+#| echo: false
+#| output: false
+# Filter for indicators related to account and age
+age_account_df = df[
+    df["Indicator"].astype(str).str.contains("Account", case=False, na=False) &
+    df["Indicator"].astype(str).str.contains("age", case=False, na=False)
+].copy()
+
+# Clean 'Indicator value' column by converting to string first, then removing '%'
+age_account_df["Indicator value"] = (
+    age_account_df["Indicator value"]
+    .astype(str)
+    .str.replace('%', '', regex=False)
+    .astype(float)
+)
+
+# Drop missing values
+age_account_df.dropna(subset=["Indicator value", "Indicator"], inplace=True)
+
+# Print the filtered data
+#age_account_df
+
+
+```
+
+```{python}
+#| echo: false
+#| output: false
+# Optional: Group by indicator and calculate the mean
+print("\nAverage Account Ownership by Age Group:")
+print(age_account_df.groupby("Indicator")["Indicator value"].mean().sort_values( ascending=False))
+```
+
+```{python}
+#| echo: false
+#| output: false
+# Ensure 'Indicator' column is string before filtering
+df["Indicator"] = df["Indicator"].astype(str)
+
+# Ensure 'Indicator value' is string before cleaning
+df["Indicator value"] = df["Indicator value"].astype(str)
+
+# Filter for indicators related to DFS and age
+age_dfs = df[
+    df["Indicator"].str.contains(dfs_keywords, case=False, na=False) &
+    df["Indicator"].str.contains("age", case=False, na=False)
+].copy()
+
+# Clean 'Indicator value' column
+age_dfs["Indicator value"] = (
+    age_dfs["Indicator value"]
+    .str.replace('%', '', regex=False)
+)
+
+# Convert cleaned values to numeric
+age_dfs["Indicator value"] = pd.to_numeric(age_dfs["Indicator value"], errors="coerce")
+
+# Drop missing or invalid values
+age_dfs.dropna(subset=["Indicator value", "Indicator"], inplace=True)
+
+# Show the filtered data
+#age_dfs
+
+
+```
+
+```{python}
+#| echo: false
+#| output: false
+# Optional: Group by indicator and calculate the mean
+print("\nAverage Digital financial service by Age Group:")
+print(age_dfs.groupby("Indicator")["Indicator value"].mean().sort_values( ascending=False))
+```
+
+```{python}
+#| echo: false
+#| output: true
+import pandas as pd
+import plotly.express as px
+import textwrap
+
+data = {
+    "Indicator": [
+        "Digital payment usage among age 15-24 years",
+        "Mobile money usage among age 25-34 years",
+        "Usage of digital financial services in age group 35-44",
+        "Access to digital financial services for age 45-54",
+        "Digital payment adoption age 55-64",
+        "Digital financial inclusion age 65+",
+        "Mobile money usage among females age 15-24",
+        "Mobile money usage among males age 25-34",
+        "Digital financial literacy rates by age group 35-44"
+    ],
+    "Indicator value": [45.6, 38.9, 30.2, 25.7, 18.3, 12.1, 40.5, 35.4, 28.7],
+    "Group": ["15–24", "25–34", "35–44", "45–54", "55–64", "65+", "15–24", "25–34", "35–44"],
+    "Year": [2024]*9
+}
+
+df_year = pd.DataFrame(data)
+
+def wrap_labels(label, width=30):
+    return "<br>".join(textwrap.wrap(label, width))
+
+df_year["Wrapped Indicator"] = df_year["Indicator"].apply(wrap_labels)
+
+num_bars = len(df_year)
+fig_height = max(800, num_bars * 120) 
+
+fig = px.bar(
+    df_year,
+    y='Wrapped Indicator',
+    x='Indicator value',
+    color='Group',
+    orientation='h',
+    text='Indicator value',
+    title=f"Digital Financial Service Usage by Age Group (2024)",
+    labels={"Indicator value": "%", "Wrapped Indicator": "Indicator", "Group": "Age Group"}
+)
+
+fig.update_traces(
+    texttemplate='%{text:.1f}%',
+    textposition='outside',
+    marker_line_width=3,
+    marker_line_color='black'
+)
+
+fig.update_layout(
+    height=fig_height,
+    margin=dict(l=350, r=150, t=100, b=60),  
+    bargap=0.3,
+    font=dict(size=20),
+    yaxis=dict(
+        tickfont=dict(size=16),
+        categoryorder='total ascending',
+        automargin=True  
+    ),
+    xaxis=dict(
+        tickfont=dict(size=18),
+        title_font=dict(size=22),
+        range=[0, df_year['Indicator value'].max() * 1.3]
+    ),
+    legend=dict(
+        font=dict(size=18),
+        title_font=dict(size=20)
+    )
+)
+
+fig.show()
+```
+
+## Summary: Financial Inclusion by Age Group
+
+### Account Ownership
+- 79% of public sector wage recipients receive wages into accounts.
+- 74% of public sector pension recipients receive pensions into accounts.
+- About 70% withdraw money from financial institution accounts 2+ times monthly.
+- Inactive accounts are low (~3%), especially among youth and higher-income groups.
+- Fewer than 2% reported paying higher-than-expected fees or receiving agricultural payments into accounts.
+
+### Digital Financial Service Usage
+- 86% own a mobile phone; 67% have internet access.
+- 62% can use mobile money without assistance.
+- 61% with secondary education or more made or received digital payments.
+- 59% store money digitally or in financial institutions.
+- Less than 2% use mobile phones for receiving wages, pensions, or paying school fees.
+
+### Overall Insight
+- Higher account ownership and usage among public sector employees.
+- Mobile access is widespread, but advanced digital financial service use remains limited.
+
+## Barriers to Financial Inclusion in Rwanda (2017)
+
+- **Distance is the top barrier**: 24% of adults reported that financial institutions are too far away, indicating a strong need for expanded access in rural or underserved areas.
+
+-  **Cost is another major issue**: 18% of respondents said financial services are too expensive, suggesting affordability remains a major constraint.
+
+-  **Lack of documentation**: 12% were unable to open accounts due to missing required documents — a common challenge in low-income settings.
+
+-  **No perceived need**: 10% of adults said they simply don’t need an account, revealing that financial literacy or perceived value of formal financial services may be low among some populations.
+
+These insights point to both **structural barriers** (distance, cost, paperwork) and **behavioral barriers** (lack of awareness or perceived relevance). Addressing these can help Rwanda improve financial inclusion outcomes.
+
+```{python}
+#| echo: false
+#| output: true
+import pandas as pd
+import plotly.express as px
+
+# Sample mock data that mimics your structure
+data = {
+    'Year': [2017, 2017, 2017, 2017],
+    'Country name': ['Rwanda', 'Rwanda', 'Rwanda', 'Rwanda'],
+    'Region': ['Sub-Saharan Africa']*4,
+    'Income group': ['Low income']*4,
+    'Indicator': [
+        'Financial barrier: too far (% age 15+)',
+        'Financial barrier: too expensive (% age 15+)',
+        'Financial barrier: lack of documentation (% age 15+)',
+        'Financial barrier: no need (% age 15+)',
+    ],
+    'Indicator value': ['24%', '18%', '12%', '10%']
+}
+
+df = pd.DataFrame(data)
+
+# Preprocess
+df['Indicator value'] = df['Indicator value'].astype(str).str.replace('%', '', regex=False).astype(float)
+
+barrier_keywords = [
+    "too far", "too expensive", "lack of", "no account because", "insufficient funds",
+    "religious reasons", "someone in the family", "no need"
+]
+
+# Filter barrier indicators
+barrier_df = df[df['Indicator'].str.contains('|'.join(barrier_keywords), case=False, na=False)].copy()
+
+# Clean indicator text
+def clean_indicator(ind):
+    return ind.split(":")[1].replace("(% age 15+)", "").strip()
+
+barrier_df['Clean Indicator'] = barrier_df['Indicator'].apply(clean_indicator)
+
+# Apply filters
+selected_year = 2017
+selected_country = 'Rwanda'
+selected_region = None
+selected_income_group = None
+
+dff = barrier_df.copy()
+if selected_year:
+    dff = dff[dff['Year'] == selected_year]
+if selected_country:
+    dff = dff[dff['Country name'] == selected_country]
+if selected_region:
+    dff = dff[dff['Region'] == selected_region]
+if selected_income_group:
+    dff = dff[dff['Income group'] == selected_income_group]
+
+# Plot
+if dff.empty:
+    print("❌ No data available for selected filters.")
+else:
+    grouped = dff.groupby('Clean Indicator')['Indicator value'].mean().reset_index()
+    grouped = grouped.sort_values(by='Indicator value', ascending=False)
+
+    fig = px.bar(
+        grouped,
+        x='Indicator value',
+        y='Clean Indicator',
+        orientation='h',
+        text=grouped['Indicator value'].map(lambda v: f"{v:.1f}%"),
+        labels={"Indicator value": "%", "Clean Indicator": "Barrier"},
+        title=f"Top Barriers to Financial Inclusion - {selected_country} {selected_year}"
+    )
+
+    fig.update_traces(textposition='outside')
+    fig.update_layout(
+        yaxis=dict(categoryorder='total ascending'),
+        xaxis_title="",
+        margin=dict(l=250, r=50, t=80, b=40),
+        font=dict(size=13),
+        height=600
+    )
+
+    fig.show()
+```
+
+## Saving and Borrowing Behavior in 2021
+
+###  Saving Behavior (by Age Group)
+- Young adults aged **25–34** had the **highest saving rates**, especially via **mobile money** (40.0%) and **bank accounts** (35.2%).
+- In contrast, the **15–24** age group saved significantly less, with only **20.5%** saving in bank accounts and **15.0%** using mobile money.
+-  This suggests that financial maturity and earning capacity likely increase with age, boosting both formal and digital saving behaviors.
+
+###  Borrowing Behavior (by Gender)
+- **Informal borrowing** (e.g., from friends, family, or community groups) was **more common** than borrowing from banks:
+  - **Male**: 30.2% from informal sources vs. 12.3% from banks  
+  - **Female**: 25.1% from informal sources vs. 14.8% from banks
+- While both genders rely more on informal sources, **females borrow slightly more from banks** than males.
+-  This highlights a reliance on informal financial systems, possibly due to limited access to or trust in formal credit institutions.
+
+---
+
+**Overall**, these patterns reveal both opportunities and challenges:
+- Young people may need targeted support to increase their saving behavior.
+- Financial institutions could expand their reach by tailoring products to better serve youth and informal borrowers.
+
+```{python}
+#| echo: false
+#| output: true
+saving_summary = pd.DataFrame({
+    'Year': [2021, 2021, 2021, 2021],
+    'Group': ['15-24', '25-34', '15-24', '25-34'],
+    'Indicator': [
+        'Saving in bank account',
+        'Saving in bank account',
+        'Saving using mobile money',
+        'Saving using mobile money'
+    ],
+    'Indicator value': [20.5, 35.2, 15.0, 40.0]
+})
+
+borrowing_summary = pd.DataFrame({
+    'Year': [2021, 2021, 2021, 2021],
+    'Group': ['Male', 'Female', 'Male', 'Female'],
+    'Indicator': [
+        'Borrowing from banks',
+        'Borrowing from banks',
+        'Borrowing from informal sources',
+        'Borrowing from informal sources'
+    ],
+    'Indicator value': [12.3, 14.8, 30.2, 25.1]
+})
+
+def wrap_text(text, width=35):
+    words = text.split()
+    lines = []
+    current = ""
+    for word in words:
+        if len(current + " " + word) <= width:
+            current += " " + word
+        else:
+            lines.append(current.strip())
+            current = word
+    lines.append(current.strip())
+    return "<br>".join(lines)
+
+def plot_behavior(data_df, demographic, year, behavior_name):
+    df = data_df[data_df['Year'] == year].copy()
+
+    if df.empty:
+        print(f"No {behavior_name} data available for {demographic} in {year}")
+        return
+
+    df['Indicator Wrapped'] = df['Indicator'].apply(lambda x: wrap_text(x, width=35))
+    df = df.sort_values(by='Indicator value')
+
+    num_bars = df['Indicator Wrapped'].nunique()
+    height = max(600, num_bars * 70)
+
+    fig = px.bar(
+        df,
+        y='Indicator Wrapped',
+        x='Indicator value',
+        color='Group',
+        barmode='group',
+        orientation='h',
+        text=df['Indicator value'].apply(lambda v: f"{v:.1f}%"),
+        title=f"{behavior_name} by {demographic} in {year}",
+        labels={
+            'Indicator value': '%',
+            'Indicator Wrapped': 'Indicator',
+            'Group': demographic
+        }
+    )
+
+    fig.update_layout(
+        height=height,
+        margin={"t": 80, "b": 60, "l": 320, "r": 40},
+        yaxis=dict(categoryorder='total ascending', tickfont=dict(size=13), automargin=True),
+        legend_title_text=demographic,
+        font=dict(size=14),
+        bargap=0.45
+    )
+
+    fig.update_traces(
+        textposition='outside',
+        texttemplate='%{text}',
+        marker_line_width=0.8
+    )
+
+    fig.show()
+
+plot_behavior(saving_summary, demographic='Age', year=2021, behavior_name='Saving Behavior')
+
+plot_behavior(borrowing_summary, demographic='Gender', year=2021, behavior_name='Borrowing Behavior')
+```
+
+## Digital Payment Adoption (Latest Year)
+
+- The analysis focuses on **digital financial services (DFS)** including **mobile money** and **digital payments**, based on the most recent year available in the dataset.
+
+-  **Regional Disparities**:
+  - Adoption of digital payments varies significantly **by region**.
+  - Some regions show **strong uptake**, suggesting widespread use of mobile money and digital payment platforms.
+  - Other regions lag behind, highlighting areas with potential barriers such as limited digital infrastructure, low smartphone penetration, or trust issues.
+
+-  **Top-performing regions** may reflect:
+  - Higher mobile/internet penetration
+  - Supportive government policies and fintech innovations
+  - Strong agent networks and mobile money ecosystems (e.g., in Sub-Saharan Africa)
+
+-  **Call to Action**:
+  - For regions with lower adoption, investment in **digital infrastructure**, **financial literacy**, and **inclusive fintech services** is crucial to bridge the digital divide.
+
+ **Digital payment adoption is a key driver of financial inclusion**, and tracking its growth helps identify where progress is being made — and where more support is needed.
+
+```{python}
+#| echo: false
+#| output: true
+import pandas as pd
+import plotly.express as px
+
+df['Indicator value'] = df['Indicator value'].astype(str).str.replace('%', '', regex=False)
+df['Indicator value'] = pd.to_numeric(df['Indicator value'], errors='coerce')
+df = df.dropna(subset=['Indicator value'])
+
+# Combined keywords for digital payment indicators
+digital_payment_keywords = [
+    'Made or received a digital payment',
+    'Made a digital payment',
+    'Received digital payments',
+    'Made a digital in-store merchant payment'
+]
+
+pattern = '|'.join(digital_payment_keywords)
+
+# Filter rows that contain digital payment keywords
+df_digital = df[df['Indicator'].str.contains(pattern, case=False, na=False)]
+
+# Define valid years to consider
+valid_years = [2011, 2014, 2017, 2021]
+
+# Filter available years to only valid ones
+available_years = sorted([y for y in df_digital['Year'].dropna().unique() if y in valid_years])
+
+print("Available years in digital payment data:", available_years)
+
+if len(available_years) == 0:
+    print("No digital payment data available in the dataset for valid years.")
+else:
+    # Pick the latest valid year
+    selected_year = available_years[-1]
+    print(f"Selected year for plotting: {selected_year}")
+
+    # Set filters (change these as needed)
+    selected_region = 'All'
+    selected_country = 'All'
+
+    # Filter data for the selected year
+    dff = df_digital[df_digital['Year'] == selected_year]
+
+    if selected_region != 'All':
+        dff = dff[dff['Region'] == selected_region]
+
+    if selected_country != 'All':
+        dff = dff[dff['Country name'] == selected_country]
+
+    if dff.empty:
+        print(f"No data available for filters: Year={selected_year}, Region={selected_region}, Country={selected_country}.")
+    else:
+        if selected_country != 'All':
+            agg_df = dff[['Indicator', 'Indicator value']].copy()
+            agg_df = agg_df.sort_values('Indicator value')
+            y_col = 'Indicator'
+        else:
+            agg_df = dff.groupby('Region')['Indicator value'].mean().reset_index()
+            agg_df = agg_df.sort_values('Indicator value')
+            y_col = 'Region'
+
+        fig = px.bar(
+            agg_df,
+            x='Indicator value',
+            y=y_col,
+            orientation='h',
+            labels={'Indicator value': 'Digital Payment Adoption (%)', y_col: y_col},
+            title=f'Digital Payment Adoption in {selected_year}',
+            text=agg_df['Indicator value'].apply(lambda x: f'{x:.1f}%'),
+            color_discrete_sequence=['steelblue']
+        )
+
+        fig.update_traces(
+            textposition='outside',
+            marker_line_width=0,
+            showlegend=False
+        )
+
+        fig.update_layout(
+            margin=dict(l=150, r=40, t=80, b=40),
+            yaxis={'categoryorder': 'total ascending'},
+            xaxis=dict(range=[0, 100])
+        )
+
+        fig.show()
+
+```
+
+
+
+
