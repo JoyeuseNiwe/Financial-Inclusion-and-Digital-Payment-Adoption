@@ -1,3 +1,4 @@
 Data/processed/world data.csv
 Data/raw/DatabankWide.xlsx"
 Dash_app/*.csv
+Notebooks/*.csv
